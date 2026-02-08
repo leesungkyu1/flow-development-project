@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 1. 백엔드 서비스 (Spring Boot)
+  server:
+    image: leesungkyu/extension-block-server:latest
+    container_name: flow-backend
+    restart: always
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/app/data  # H2 데이터베이스 영속성 확보
+    environment:
+      - SPRING_PROFILES_ACTIVE=prod
+      # t3.micro의 메모리를 고려하여 JVM 힙 사이즈 제한
+      - JAVA_OPTS=-Xms256m -Xmx512m
+    deploy:
+      resources:
+        limits:
+          memory: 600M
+
+  # 2. 프론트엔드 서비스 (React + Nginx)
+  client:
+    image: leesungkyu/extension-block-client:latest
+    container_name: flow-frontend
+    restart: always
+    ports:
+      - "80:80"
+    depends_on:
+      - server
+    # Nginx 설정을 외부에서 주입하고 싶다면 아래 주석을 해제하세요
+    # volumes:
+    #   - ./nginx/default.conf:/etc/nginx/conf.d/default.conf
+    deploy:
+      resources:
+        limits:
+          memory: 200M
+
+networks:
+  default:
+    name: flow-network
