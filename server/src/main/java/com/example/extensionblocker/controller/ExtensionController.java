@@ -10,6 +10,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import com.example.extensionblocker.dto.CustomExtensionRequestListDto;
+import jakarta.validation.Valid;
+import com.example.extensionblocker.dto.CustomExtensionBatchResultDto; // Import the new DTO
+
 import java.util.List;
 import java.util.Map;
 
@@ -71,20 +75,16 @@ public class ExtensionController {
     }
 
     /**
-     * 새로운 커스텀 확장자를 추가합니다.
-     * 확장자 이름은 비어 있을 수 없으며, 중복되거나 200개 제한을 초과할 수 없습니다.
+     * 새로운 커스텀 확장자 목록을 추가합니다.
+     * 각 확장자 이름은 비어 있을 수 없으며, 중복되거나 200개 제한을 초과할 수 없습니다.
      *
-     * @param payload 추가할 확장자 이름을 포함하는 맵 (예: {"name": "xyz"})
-     * @return 새로 추가된 커스텀 확장자를 포함하는 ResponseEntity
+     * @param requestDto 추가할 확장자 이름 목록을 포함하는 DTO
+     * @return 새로 추가된 커스텀 확장자 목록을 포함하는 ResponseEntity
      */
     @PostMapping("/custom-extensions")
-    public ResponseEntity<ApiResponse<CustomExtensionDto>> addCustomExtension(@RequestBody Map<String, String> payload) {
-        String name = payload.get("name");
-        if (name == null || name.isBlank()) {
-            return new ResponseEntity<>(ApiResponse.error("BAD_REQUEST", "Extension name cannot be empty."), HttpStatus.BAD_REQUEST);
-        }
-        CustomExtensionDto newExtension = extensionService.addCustomExtension(name);
-        return new ResponseEntity<>(ApiResponse.success(newExtension), HttpStatus.CREATED);
+    public ResponseEntity<ApiResponse<CustomExtensionBatchResultDto>> addCustomExtensions(@Valid @RequestBody CustomExtensionRequestListDto requestDto) {
+        CustomExtensionBatchResultDto resultDto = extensionService.addCustomExtensions(requestDto.getNames());
+        return new ResponseEntity<>(ApiResponse.success(resultDto), HttpStatus.CREATED);
     }
 
     /**

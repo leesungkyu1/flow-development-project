@@ -6,6 +6,9 @@ import com.example.extensionblocker.dto.CustomExtensionDto;
 import com.example.extensionblocker.dto.FixedExtensionDto;
 import com.example.extensionblocker.repository.CustomExtensionRepository;
 import com.example.extensionblocker.repository.FixedExtensionRepository;
+import com.example.extensionblocker.dto.CustomExtensionRequestListDto;
+import com.example.extensionblocker.dto.CustomExtensionRequestListDto.CustomExtensionNameDto;
+import com.example.extensionblocker.dto.CustomExtensionBatchResultDto;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -13,10 +16,14 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.ArgumentCaptor;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
+import java.util.Map;
+import java.util.HashMap;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -37,6 +44,13 @@ class ExtensionServiceTest {
 
     private FixedExtension fixedBat;
     private CustomExtension customPep;
+
+    // Helper method to create CustomExtensionNameDto list
+    private List<CustomExtensionNameDto> createCustomExtensionNameDtos(String... names) {
+        return Arrays.stream(names)
+                .map(CustomExtensionNameDto::new)
+                .collect(Collectors.toList());
+    }
 
     @BeforeEach
     void setUp() {
@@ -94,106 +108,133 @@ class ExtensionServiceTest {
         verify(fixedExtensionRepository, never()).save(any(FixedExtension.class));
     }
 
+    // New tests for addCustomExtensions
     @Test
-    @DisplayName("커스텀 확장자 추가 - 성공")
-    void addCustomExtension_success() {
+    @DisplayName("커스텀 확장자 여러 개 추가 - 성공")
+    void addCustomExtensions_success() {
+        List<CustomExtensionNameDto> names = createCustomExtensionNameDtos("newext", "another");
         when(customExtensionRepository.count()).thenReturn(0L);
         when(fixedExtensionRepository.findByName(anyString())).thenReturn(Optional.empty());
         when(customExtensionRepository.existsByName(anyString())).thenReturn(false);
-        when(customExtensionRepository.save(any(CustomExtension.class))).thenReturn(customPep);
+        when(customExtensionRepository.save(any(CustomExtension.class)))
+                .thenReturn(CustomExtension.builder().id(2L).name("newext").build())
+                .thenReturn(CustomExtension.builder().id(3L).name("another").build());
 
-        CustomExtensionDto result = extensionService.addCustomExtension("pep");
+        CustomExtensionBatchResultDto result = extensionService.addCustomExtensions(names);
 
-        assertThat(result.getName()).isEqualTo("pep");
+        assertThat(result.getSuccessCount()).isEqualTo(2);
+        assertThat(result.getFailedCount()).isEqualTo(0);
+        assertThat(result.getSuccessfulAdditions()).hasSize(2);
+        assertThat(result.getSuccessfulAdditions().get(0).getName()).isEqualTo("newext");
+        assertThat(result.getSuccessfulAdditions().get(1).getName()).isEqualTo("another");
         verify(customExtensionRepository, times(1)).count();
-        verify(fixedExtensionRepository, times(1)).findByName("pep");
-        verify(customExtensionRepository, times(1)).existsByName("pep");
-        verify(customExtensionRepository, times(1)).save(any(CustomExtension.class));
+        verify(fixedExtensionRepository, times(2)).findByName(anyString());
+        verify(customExtensionRepository, times(2)).existsByName(anyString());
+        verify(customExtensionRepository, times(2)).save(any(CustomExtension.class));
     }
 
     @Test
-    @DisplayName("커스텀 확장자 추가 - 입력값 앞뒤 공백 제거 및 소문자 변환")
-    void addCustomExtension_trimAndLowercase() {
-        when(customExtensionRepository.count()).thenReturn(0L);
-        when(fixedExtensionRepository.findByName(anyString())).thenReturn(Optional.empty());
-        when(customExtensionRepository.existsByName(anyString())).thenReturn(false);
-        when(customExtensionRepository.save(any(CustomExtension.class))).thenReturn(CustomExtension.builder().id(1L).name("new").build());
+    @DisplayName("커스텀 확장자 여러 개 추가 - 일부 중복 및 고정 확장자명 포함")
+    void addCustomExtensions_partialSuccess_withDuplicatesAndFixed() {
+        List<CustomExtensionNameDto> names = createCustomExtensionNameDtos("newext", "pep", "bat", "yetanother");
+        when(customExtensionRepository.count()).thenReturn(0L); // Initial count
 
-        CustomExtensionDto result = extensionService.addCustomExtension(" NEW ");
+        // "newext"
+        when(fixedExtensionRepository.findByName("newext")).thenReturn(Optional.empty());
+        when(customExtensionRepository.existsByName("newext")).thenReturn(false);
+        when(customExtensionRepository.save(any(CustomExtension.class)))
+                .thenReturn(CustomExtension.builder().id(2L).name("newext").build())
+                .thenReturn(CustomExtension.builder().id(3L).name("yetanother").build());
 
-        assertThat(result.getName()).isEqualTo("new");
-        verify(fixedExtensionRepository, times(1)).findByName("new");
-        verify(customExtensionRepository, times(1)).existsByName("new");
-        verify(customExtensionRepository, times(1)).save(any(CustomExtension.class));
-    }
 
-    @Test
-    @DisplayName("커스텀 확장자 추가 - 이름이 비어있음")
-    void addCustomExtension_emptyName() {
-        assertThatThrownBy(() -> extensionService.addCustomExtension(" "))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("커스텀 확장자의 글자수가 1글자에서 20자까지 입력가능합니다.");
-        verify(customExtensionRepository, never()).count();
-        verify(fixedExtensionRepository, never()).findByName(anyString());
-        verify(customExtensionRepository, never()).existsByName(anyString());
-        verify(customExtensionRepository, never()).save(any(CustomExtension.class));
-    }
-
-    @Test
-    @DisplayName("커스텀 확장자 추가 - 이름이 20자 초과")
-    void addCustomExtension_nameTooLong() {
-        assertThatThrownBy(() -> extensionService.addCustomExtension("abcdefghijklmnopqrstuvwxyz"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("커스텀 확장자의 글자수가 1글자에서 20자까지 입력가능합니다.");
-        verify(customExtensionRepository, never()).count();
-        verify(fixedExtensionRepository, never()).findByName(anyString());
-        verify(customExtensionRepository, never()).existsByName(anyString());
-        verify(customExtensionRepository, never()).save(any(CustomExtension.class));
-    }
-
-    @Test
-    @DisplayName("커스텀 확장자 추가 - 200개 제한 초과")
-    void addCustomExtension_limitExceeded() {
-        when(customExtensionRepository.count()).thenReturn(200L);
-
-        assertThatThrownBy(() -> extensionService.addCustomExtension("new"))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("커스텀 확장자의 등록 개수가 200개를 초과하였습니다.");
-        verify(customExtensionRepository, times(1)).count();
-        verify(fixedExtensionRepository, never()).findByName(anyString());
-        verify(customExtensionRepository, never()).existsByName(anyString());
-        verify(customExtensionRepository, never()).save(any(CustomExtension.class));
-    }
-
-    @Test
-    @DisplayName("커스텀 확장자 추가 - 이미 존재하는 고정 확장자와 중복")
-    void addCustomExtension_fixedExtensionExists() {
-        when(customExtensionRepository.count()).thenReturn(0L);
-        when(fixedExtensionRepository.findByName("bat")).thenReturn(Optional.of(fixedBat));
-
-        assertThatThrownBy(() -> extensionService.addCustomExtension("bat"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("확장자 'bat' 는 중복되었습니다.");
-        verify(customExtensionRepository, times(1)).count();
-        verify(fixedExtensionRepository, times(1)).findByName("bat");
-        verify(customExtensionRepository, never()).existsByName(anyString());
-        verify(customExtensionRepository, never()).save(any(CustomExtension.class));
-    }
-
-    @Test
-    @DisplayName("커스텀 확장자 추가 - 이미 존재하는 커스텀 확장자와 중복")
-    void addCustomExtension_customExtensionExists() {
-        when(customExtensionRepository.count()).thenReturn(0L);
+        // "pep" (duplicate custom)
         when(fixedExtensionRepository.findByName("pep")).thenReturn(Optional.empty());
         when(customExtensionRepository.existsByName("pep")).thenReturn(true);
 
-        assertThatThrownBy(() -> extensionService.addCustomExtension("pep"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("확장자 'pep' 는 중복되었습니다.");
+        // "bat" (fixed extension)
+        when(fixedExtensionRepository.findByName("bat")).thenReturn(Optional.of(fixedBat));
+
+        // "yetanother" (already stubbed save for "yetanother" above, this is just to ensure it's not double-stubbed)
+        when(fixedExtensionRepository.findByName("yetanother")).thenReturn(Optional.empty());
+        when(customExtensionRepository.existsByName("yetanother")).thenReturn(false);
+
+        CustomExtensionBatchResultDto result = extensionService.addCustomExtensions(names);
+
+        assertThat(result.getSuccessCount()).isEqualTo(2);
+        assertThat(result.getFailedCount()).isEqualTo(2);
+        assertThat(result.getSuccessfulAdditions()).hasSize(2);
+        assertThat(result.getSuccessfulAdditions().stream().map(CustomExtensionDto::getName)).containsExactlyInAnyOrder("newext", "yetanother");
+        
+        Map<String, String> expectedFailures = new HashMap<>();
+        expectedFailures.put("pep", "이미 존재하는 커스텀 확장자입니다.");
+        expectedFailures.put("bat", "고정 확장자와 중복됩니다.");
+        assertThat(result.getFailedExtensionsWithReasons()).containsExactlyInAnyOrderEntriesOf(expectedFailures);
+
         verify(customExtensionRepository, times(1)).count();
-        verify(fixedExtensionRepository, times(1)).findByName("pep");
-        verify(customExtensionRepository, times(1)).existsByName("pep");
-        verify(customExtensionRepository, never()).save(any(CustomExtension.class));
+        verify(fixedExtensionRepository, times(4)).findByName(anyString());
+        verify(customExtensionRepository, times(3)).existsByName(anyString());
+        verify(customExtensionRepository, times(2)).save(any(CustomExtension.class));
+    }
+
+    @Test
+    @DisplayName("커스텀 확장자 여러 개 추가 - 200개 제한 초과 (중간에 제한 도달)")
+    void addCustomExtensions_limitExceeded_midBatch() {
+        List<CustomExtensionNameDto> names = createCustomExtensionNameDtos("ext1", "ext2", "ext3");
+        when(customExtensionRepository.count()).thenReturn(199L); // Already 199 exists
+
+        // "ext1" will be saved
+        when(fixedExtensionRepository.findByName("ext1")).thenReturn(Optional.empty());
+        when(customExtensionRepository.existsByName("ext1")).thenReturn(false);
+        when(customExtensionRepository.save(any(CustomExtension.class)))
+                .thenReturn(CustomExtension.builder().id(2L).name("ext1").build());
+
+        // "ext2" will hit the limit (199 + 1 = 200)
+        // No explicit stub for findByName("ext2") and existsByName("ext2") because they won't be called.
+
+
+        CustomExtensionBatchResultDto result = extensionService.addCustomExtensions(names);
+
+        assertThat(result.getSuccessCount()).isEqualTo(1);
+        assertThat(result.getFailedCount()).isEqualTo(2);
+        assertThat(result.getSuccessfulAdditions()).hasSize(1);
+        assertThat(result.getSuccessfulAdditions().get(0).getName()).isEqualTo("ext1");
+        assertThat(result.getFailedExtensionsWithReasons()).containsEntry("ext2", "등록 개수(200개)를 초과하였습니다.");
+        assertThat(result.getFailedExtensionsWithReasons()).containsEntry("ext3", "등록 개수(200개)를 초과하였습니다.");
+
+        verify(customExtensionRepository, times(1)).count();
+        verify(fixedExtensionRepository, times(1)).findByName(anyString()); // Only for ext1
+        verify(customExtensionRepository, times(1)).existsByName(anyString()); // Only for ext1
+        verify(fixedExtensionRepository, never()).findByName("ext2"); // Should not be called for ext2
+        verify(customExtensionRepository, never()).existsByName("ext2"); // Should not be called for ext2
+        verify(fixedExtensionRepository, never()).findByName("ext3"); // Should not be called for ext3
+        verify(customExtensionRepository, never()).existsByName("ext3"); // Should not be called for ext3
+        verify(customExtensionRepository, times(1)).save(any(CustomExtension.class)); // only ext1 saved
+    }
+
+    @Test
+    @DisplayName("커스텀 확장자 여러 개 추가 - 요청 내 중복된 확장자")
+    void addCustomExtensions_duplicatesInBatch() {
+        List<CustomExtensionNameDto> names = createCustomExtensionNameDtos("newext", "test", "TEST", "another");
+        when(customExtensionRepository.count()).thenReturn(0L);
+        when(fixedExtensionRepository.findByName(anyString())).thenReturn(Optional.empty());
+        when(customExtensionRepository.existsByName(anyString())).thenReturn(false);
+        when(customExtensionRepository.save(any(CustomExtension.class)))
+                .thenReturn(CustomExtension.builder().id(2L).name("newext").build())
+                .thenReturn(CustomExtension.builder().id(3L).name("test").build())
+                .thenReturn(CustomExtension.builder().id(4L).name("another").build());
+
+        CustomExtensionBatchResultDto result = extensionService.addCustomExtensions(names);
+
+        assertThat(result.getSuccessCount()).isEqualTo(3); // newext, test, another
+        assertThat(result.getFailedCount()).isEqualTo(1); // TEST (duplicate of test)
+        assertThat(result.getSuccessfulAdditions()).hasSize(3);
+        assertThat(result.getSuccessfulAdditions().stream().map(CustomExtensionDto::getName)).containsExactlyInAnyOrder("newext", "test", "another");
+        assertThat(result.getFailedExtensionsWithReasons()).containsEntry("test", "요청 내 중복된 확장자입니다."); // "TEST" is cleaned to "test"
+
+        verify(customExtensionRepository, times(1)).count();
+        verify(fixedExtensionRepository, times(3)).findByName(anyString());
+        verify(customExtensionRepository, times(3)).existsByName(anyString());
+        verify(customExtensionRepository, times(3)).save(any(CustomExtension.class));
     }
 
     @Test

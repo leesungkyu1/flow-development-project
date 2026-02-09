@@ -1,10 +1,16 @@
 package com.example.extensionblocker.exception;
 
 import com.example.extensionblocker.common.ApiResponse;
+import com.example.extensionblocker.dto.CustomExtensionBatchResultDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 전역 예외 처리 핸들러.
@@ -47,6 +53,25 @@ public class GlobalExceptionHandler {
      */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGenericException(Exception ex) {
-        return new ResponseEntity<>(ApiResponse.error("INTERNAL_SERVER_ERROR", "An unexpected error occurred: " + ex.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
+        return new ResponseEntity<>(ApiResponse.error("INTERNAL_SERVER_ERROR", "dPTkdcl ahtgks dhfb: " + ex.getMessage()), HttpStatus.INTERNAL_SERVER_ERROR);
     }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse<CustomExtensionBatchResultDto>> handleValidationExceptions(MethodArgumentNotValidException ex) {
+        Map<String, String> notValidMap = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach((error) -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            Object rejectedValue = ((FieldError) error).getRejectedValue(); // Get the actual rejected value
+            System.out.println("Validation Error - Field: " + fieldName + ", Rejected Value: " + rejectedValue + ", Message: " + errorMessage); // Add rejectedValue
+            notValidMap.put(fieldName, errorMessage);
+        });
+        return new ResponseEntity<>(ApiResponse.error("ARGUMENT_NOT_VALID", "글자수가 1글자에서 20자 사이여야 합니다.",
+                CustomExtensionBatchResultDto.builder()
+                        .successCount(0)
+                        .failedCount(1)
+                        .failedExtensionsWithReasons(notValidMap)
+                        .build()), HttpStatus.CREATED);
+    }
+
 }

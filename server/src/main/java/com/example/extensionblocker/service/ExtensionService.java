@@ -3,6 +3,7 @@ package com.example.extensionblocker.service;
 import com.example.extensionblocker.domain.CustomExtension;
 import com.example.extensionblocker.domain.FixedExtension;
 import com.example.extensionblocker.dto.CustomExtensionDto;
+import com.example.extensionblocker.dto.CustomExtensionRequestListDto;
 import com.example.extensionblocker.dto.FixedExtensionDto;
 import com.example.extensionblocker.repository.CustomExtensionRepository;
 import com.example.extensionblocker.repository.FixedExtensionRepository;
@@ -12,7 +13,13 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.extensionblocker.dto.CustomExtensionBatchResultDto;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Set; // Added for HashSet
+import java.util.HashSet; // Added for HashSet
 import java.util.stream.Collectors;
 
 /**
@@ -70,33 +77,66 @@ public class ExtensionService {
     }
 
     /**
-     * 새로운 커스텀 확장자를 추가합니다.
-     * 확장자 이름은 1자에서 20자 사이여야 하며, 기존 확장자와 중복될 수 없고,
-     * 전체 커스텀 확장자 개수가 200개를 초과할 수 없습니다.
+     * 여러 개의 새로운 커스텀 확장자를 추가합니다.
+     * 각 확장자는 유효성 검사를 거치며, 중복되거나 전체 개수 제한을 초과하는 확장자는 추가되지 않습니다.
      *
-     * @param name 추가할 커스텀 확장자 이름 (자동으로 소문자로 변환 및 공백 제거)
-     * @return 새로 추가된 커스텀 확장자 객체
-     * @throws IllegalArgumentException 확장자 이름이 유효하지 않거나 이미 존재하는 경우
+     * @param extensionNames 추가할 커스텀 확장자 이름 목록 (CustomExtensionNameDto 객체)
+     * @return 성공적으로 추가된 커스텀 확장자들의 DTO 목록
      * @throws IllegalStateException    커스텀 확장자 개수 제한(200개)을 초과한 경우
      */
     @Transactional
-    public CustomExtensionDto addCustomExtension(String name) {
-        String cleanedName = name.toLowerCase().trim();
+    public CustomExtensionBatchResultDto addCustomExtensions(List<CustomExtensionRequestListDto.CustomExtensionNameDto> extensionNames) {
+        List<CustomExtensionDto> successfulAdditions = new ArrayList<>();
+        int successCount = 0;
+        int failedCount = 0;
+        Map<String, String> failedExtensionsWithReasons = new HashMap<>();
 
-        if (cleanedName.isEmpty() || cleanedName.length() > 20) {
-            throw new IllegalArgumentException("커스텀 확장자의 글자수가 1글자에서 20자까지 입력가능합니다.");
+        int currentCustomExtensionCount = (int) customExtensionRepository.count();
+        final int MAX_CUSTOM_EXTENSIONS = 200;
+
+        Set<String> processedNamesInBatch = new HashSet<>();
+
+        for (CustomExtensionRequestListDto.CustomExtensionNameDto extDto : extensionNames) {
+            String cleanedName = extDto.getName().toLowerCase().trim();
+
+            if (processedNamesInBatch.contains(cleanedName)) {
+                failedCount++;
+                failedExtensionsWithReasons.put(cleanedName, "요청 내 중복된 확장자입니다.");
+                continue;
+            }
+            processedNamesInBatch.add(cleanedName);
+
+            if (currentCustomExtensionCount >= MAX_CUSTOM_EXTENSIONS) {
+                failedCount++;
+                failedExtensionsWithReasons.put(cleanedName, "등록 개수(" + MAX_CUSTOM_EXTENSIONS + "개)를 초과하였습니다.");
+                continue;
+            }
+
+            if (cleanedName.isEmpty() || cleanedName.length() > 20) {
+                failedCount++;
+                failedExtensionsWithReasons.put(cleanedName, "글자수가 1글자에서 20자 사이여야 합니다.");
+                continue;
+            }
+
+            if (fixedExtensionRepository.findByName(cleanedName).isPresent()) {
+                failedCount++;
+                failedExtensionsWithReasons.put(cleanedName, "고정 확장자와 중복됩니다.");
+                continue;
+            }
+
+            if (customExtensionRepository.existsByName(cleanedName)) {
+                failedCount++;
+                failedExtensionsWithReasons.put(cleanedName, "이미 존재하는 커스텀 확장자입니다.");
+                continue;
+            }
+
+            CustomExtension customExtension = CustomExtension.builder().name(cleanedName).build();
+            CustomExtension savedExtension = customExtensionRepository.save(customExtension);
+            successfulAdditions.add(CustomExtensionDto.fromEntity(savedExtension));
+            successCount++;
+            currentCustomExtensionCount++;
         }
-
-        if (customExtensionRepository.count() >= 200) {
-            throw new IllegalStateException("커스텀 확장자의 등록 개수가 200개를 초과하였습니다.");
-        }
-
-        if (fixedExtensionRepository.findByName(cleanedName).isPresent() || customExtensionRepository.existsByName(cleanedName)) {
-            throw new IllegalArgumentException("확장자 '" + cleanedName + "' 는 중복되었습니다.");
-        }
-
-        CustomExtension customExtension = CustomExtension.builder().name(cleanedName).build();
-        return CustomExtensionDto.fromEntity(customExtensionRepository.save(customExtension));
+        return new CustomExtensionBatchResultDto(successfulAdditions, successCount, failedCount, failedExtensionsWithReasons);
     }
 
     /**

@@ -61,6 +61,10 @@ public class ApiResponse<T> {
         return new ApiResponse<>(false, null, new ErrorResponse(errorCode, message));
     }
 
+    public static <T> ApiResponse<T> error(String errorCode, String message, T data) {
+        return new ApiResponse<>(false, data, new ErrorResponse(errorCode, message));
+    }
+
     /**
      * API 오류 정보를 나타내는 내부 클래스.
      */

@@ -1,10 +1,13 @@
 package com.example.extensionblocker.repository;
 
 import com.example.extensionblocker.domain.CustomExtension;
+import com.example.extensionblocker.dto.CustomExtensionRequestListDto;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * {@link CustomExtension} 엔티티에 대한 데이터 접근(Repository) 인터페이스.
@@ -34,4 +37,6 @@ public interface CustomExtensionRepository extends JpaRepository<CustomExtension
      * @return 커스텀 확장자의 총 개수
      */
     long count();
+
+    List<CustomExtension> findAllByNameIn(Set<String> extensionNames);
 }
