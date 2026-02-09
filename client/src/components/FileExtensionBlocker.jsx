@@ -166,7 +166,7 @@ function FileExtensionBlocker() {
       const response = await makeApiCall('/api/custom-extensions', 'POST', requestBody);
 
       if (response && response.data) {
-          successfullyAddedExtensions = response.data;
+          successfullyAddedExtensions = response.data.successfulAdditions;
           const newUniqueExtensions = successfullyAddedExtensions.filter(
               newExt => !customExtensions.some(existingExt => existingExt.id === newExt.id)
           );
