@@ -11,20 +11,7 @@
         Infrastructure: AWS EC2 (t3.micro), Docker, Docker-Compose, Nginx
 
 2. 시스템 아키텍처 및 설계
-    2.1. 데이터베이스 구조
-
-    FIXED_EXTENSION {
-        bigint id PK
-        varchar name UK
-        varchar description
-        boolean checked
-        varchar magic_number
-    }
-    CUSTOM_EXTENSION {
-        bigint id PK
-        varchar name UK
-    }
-    2.2. 테이블 설계 의무 및 확장성
+    2.1. 테이블 설계 의무 및 확장성
         fixed_extension: 시스템 핵심 보안 규칙을 저장합니다. 특히 magic_number 필드를 설계에 포함하여, 단순 확장자 변조(예: .exe를 .txt로 변경)를 바이너리 수준에서 탐지할 수 있는 확장성을 확보했습니다.
         custom_extension: 최대 200개까지 수용 가능한 사용자 정의 규칙을 저장하며, 고정 확장자와의 논리적 무결성을 비즈니스 로직에서 보장합니다.
 
